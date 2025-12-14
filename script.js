@@ -1,5 +1,5 @@
 // API Configuration
-const API_KEY = '52bab4f785506ee6bd26258dfad92b13';
+const API_KEY = config.API_KEY;
 let currentCity = 'Dagupan';
 const COUNTRY_CODE = 'PH';
 const BASE_URL = 'https://api.openweathermap.org/data/2.5';
@@ -19,18 +19,61 @@ const predictionDescEl = document.getElementById('prediction-desc');
 const visibilityEl = document.getElementById('visibility');
 const humidityEl = document.getElementById('humidity');
 const forecastListEl = document.getElementById('forecast-list');
+const errorContainer = document.getElementById('error-container');
+const loadingIndicator = document.getElementById('loading-indicator');
+const aqiDisplayEl = document.getElementById('aqi-display');
+const favoriteBtn = document.getElementById('favorite-btn');
+const favoritesListEl = document.getElementById('favorites-list');
+
+// State
+let favorites = JSON.parse(localStorage.getItem('weatherFavorites')) || [];
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     fetchWeatherData();
     updateDate();
+    renderFavorites();
 
     searchBtn.addEventListener('click', handleSearch);
     cityInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') handleSearch();
     });
     themeToggle.addEventListener('click', toggleTheme);
+    favoriteBtn.addEventListener('click', toggleFavorite);
 });
+
+function toggleFavorite() {
+    const city = cityDisplayEl.textContent;
+    if (!city || city === '--') return;
+
+    const index = favorites.indexOf(city);
+    if (index === -1) {
+        favorites.push(city);
+        favoriteBtn.textContent = '❤️';
+        favoriteBtn.classList.add('active');
+    } else {
+        favorites.splice(index, 1);
+        favoriteBtn.textContent = '🤍';
+        favoriteBtn.classList.remove('active');
+    }
+    
+    localStorage.setItem('weatherFavorites', JSON.stringify(favorites));
+    renderFavorites();
+}
+
+function renderFavorites() {
+    favoritesListEl.innerHTML = '';
+    favorites.forEach(city => {
+        const chip = document.createElement('div');
+        chip.classList.add('fav-chip');
+        chip.textContent = city;
+        chip.addEventListener('click', () => {
+            cityInput.value = city;
+            handleSearch();
+        });
+        favoritesListEl.appendChild(chip);
+    });
+}
 
 function toggleTheme() {
     document.body.classList.toggle('dark-mode');
@@ -53,6 +96,8 @@ function handleSearch() {
     if (city) {
         currentCity = city;
         fetchWeatherData();
+    } else {
+        showError('Please enter a city name.');
     }
 }
 
@@ -62,11 +107,55 @@ function updateDate() {
     currentDateEl.textContent = now.toLocaleDateString('en-US', options);
 }
 
+function showError(message) {
+    errorContainer.textContent = message;
+    errorContainer.classList.remove('hidden');
+    setTimeout(() => {
+        errorContainer.classList.add('hidden');
+    }, 5000);
+}
+
+function showLoading() {
+    loadingIndicator.classList.remove('hidden');
+    searchBtn.disabled = true;
+    errorContainer.classList.add('hidden');
+    
+    // Reset UI to avoid confusion with previous data
+    cityDisplayEl.textContent = '--';
+    favoriteBtn.textContent = '🤍';
+    favoriteBtn.classList.remove('active');
+    currentTempEl.textContent = '--°';
+    weatherDescEl.textContent = '--';
+    detailedDescEl.textContent = '--';
+    predictionDescEl.textContent = '--';
+    visibilityEl.textContent = '-- km';
+    humidityEl.textContent = '--%';
+    sunriseTimeEl.textContent = '--:--';
+    sunsetTimeEl.textContent = '--:--';
+    aqiDisplayEl.textContent = '--';
+    forecastListEl.innerHTML = '';
+    
+    // Clear chart
+    if (window.myWeatherChart) {
+        window.myWeatherChart.destroy();
+        window.myWeatherChart = null;
+    }
+}
+
+function hideLoading() {
+    loadingIndicator.classList.add('hidden');
+    searchBtn.disabled = false;
+}
+
 async function fetchWeatherData() {
+    showLoading();
     try {
         // Fetch Current Weather
         const weatherResponse = await fetch(`${BASE_URL}/weather?q=${currentCity},${COUNTRY_CODE}&units=metric&appid=${API_KEY}`);
-        if (!weatherResponse.ok) throw new Error('Failed to fetch current weather');
+        if (!weatherResponse.ok) {
+            if (weatherResponse.status === 404) throw new Error('City not found');
+            throw new Error('Failed to fetch current weather');
+        }
         const weatherData = await weatherResponse.json();
         updateCurrentWeather(weatherData);
 
@@ -78,14 +167,39 @@ async function fetchWeatherData() {
         updateHourlyForecast(forecastData);
         updateDailyForecast(forecastData);
 
+        // Fetch Air Quality (3rd Endpoint)
+        const { lat, lon } = weatherData.coord;
+        const aqiResponse = await fetch(`${BASE_URL}/air_pollution?lat=${lat}&lon=${lon}&appid=${API_KEY}`);
+        if (!aqiResponse.ok) throw new Error('Failed to fetch air quality');
+        const aqiData = await aqiResponse.json();
+        updateAirQuality(aqiData);
+
     } catch (error) {
         console.error('Error:', error);
-        alert(`Error: ${error.message}`);
+        showError(error.message);
+    } finally {
+        hideLoading();
     }
+}
+
+function updateAirQuality(data) {
+    const aqi = data.list[0].main.aqi;
+    const aqiText = ['Good', 'Fair', 'Moderate', 'Poor', 'Very Poor'][aqi - 1] || 'Unknown';
+    aqiDisplayEl.textContent = `${aqi} - ${aqiText}`;
 }
 
 function updateCurrentWeather(data) {
     cityDisplayEl.textContent = data.name;
+    
+    // Update Favorite Button State
+    if (favorites.includes(data.name)) {
+        favoriteBtn.textContent = '❤️';
+        favoriteBtn.classList.add('active');
+    } else {
+        favoriteBtn.textContent = '🤍';
+        favoriteBtn.classList.remove('active');
+    }
+
     currentTempEl.textContent = `${Math.round(data.main.temp)}°`;
     weatherDescEl.textContent = data.weather[0].main;
     
@@ -228,4 +342,4 @@ function updateDailyForecast(data) {
 
 
 // Initialize
-document.addEventListener('DOMContentLoaded', fetchWeatherData);
+// document.addEventListener('DOMContentLoaded', fetchWeatherData);
