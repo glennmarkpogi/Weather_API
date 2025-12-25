@@ -25,7 +25,7 @@ A comprehensive weather dashboard that provides real-time weather information, a
 
 1. **Clone the repository**
    ```sh
-   git clone https://github.com/your-username/your-repo-name.git
+   git clone https://github.com/glennmarkpogi/Weather_API.git
    ```
 2. **Navigate to the project folder**
    ```sh
@@ -91,3 +91,4 @@ Created by Glenn Mark, December 2025.
   "name": "Dagupan"
 }
 ```
+
